@@ -1,0 +1,130 @@
+# 1.0.0
+
+#+++++++++++++++++++++
+# debugging docker 
+#+++++++++++++++++++++
+# docker build -t dev:1.0.0 -f dev.docker . --progress=plain
+# docker run -it --rm dev:1.0.0 /bin/bash
+#---------------------
+
+#+++++++++++++++++++++
+# use ubuntu as the base
+#+++++++++++++++++++++
+From ubuntu:22.04
+# Change the default shell to bash
+SHELL ["/bin/bash", "-c"]
+#---------------------
+
+#+++++++++++++++++++++
+# install en_US.utf8
+#+++++++++++++++++++++
+RUN apt-get update && apt-get install -y locales && rm -rf /var/lib/apt/lists/* \
+    && localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
+ENV LANG en_US.utf8
+#---------------------
+
+#+++++++++++++++++++++
+# install system packages
+#+++++++++++++++++++++
+RUN apt-get update && apt-get install -y \
+    vim \
+    curl \
+    bzip2 \
+    systemd \
+    systemd-sysv \
+    python-is-python3
+# install pip
+RUN curl https://bootstrap.pypa.io/get-pip.py | python
+#---------------------
+
+##+++++++++++++++++++++
+## install miniconda
+##+++++++++++++++++++++
+#WORKDIR /software
+#ENV CONDA_ROOT_PREFIX="/software/conda"
+## -s for --silent, -L for following HTTP redirect, -o for download file
+#RUN curl -sLo miniconda_install.sh https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
+#    && bash miniconda_install.sh -b -p $CONDA_ROOT_PREFIX \
+#    && $CONDA_ROOT_PREFIX/bin/conda init
+##---------------------
+
+#+++++++++++++++++++++
+# micromamba is not very convenient for docker 
+# (cannot be init non-interactively)
+#+++++++++++++++++++++
+# WORKDIR /software
+# -s for --silent, -L for following HTTP redirect, -o for download file 
+# script used because mamba install.sh contains `if -t 0`, which requires to use script to simulate a terminal
+# <<< $'Y\n/software/mamba3\n' is used to send parameters to the `read` command in install.sh  
+# /dev/null: This is the output file for the script command, where the captured terminal session output is discarded
+# ENV MAMBA_ROOT_PREFIX="/software/mamba"
+# RUN curl -sLo micromamba_install.sh micro.mamba.pm/install.sh \
+#   && script -eqc 'bash micromamba_install.sh' <<< $'Y\n'$MAMBA_ROOT_PREFIX$'\n' /dev/null \
+#   && /root/.local/bin/micromamba shell init --shell=bash --prefix=$MAMBA_ROOT_PREFIX
+# RUN micromamba activate 
+# RUN micromamba install python=3.9 -c conda-forge
+# RUN micromamba create -n py39 python=3.9 -c conda-forge
+#   && micromamba activate py39
+#---------------------
+
+
+##+++++++++++++++++++++
+## install python virtual environment
+##+++++++++++++++++++++
+#RUN source $CONDA_ROOT_PREFIX/etc/profile.d/conda.sh \
+#    && conda activate \
+#    && conda install python=3.9 \
+#    && conda create -n py39 python=3.9
+##---------------------
+
+#+++++++++++++++++++++
+# install gpt-academic requirements
+#+++++++++++++++++++++
+ARG GPT_sh_PREFIX="/software/gpt_academic"
+WORKDIR $GPT_sh_PREFIX
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+#---------------------
+
+
+# #+++++++++++++++++++++
+# # create gpt-academic service
+# #+++++++++++++++++++++
+# RUN echo -e '#!/bin/bash \n\ 
+# source '$CONDA_ROOT_PREFIX'/etc/profile.d/conda.sh \n\ 
+# conda activate py39 \n\ 
+# python '$GPT_py_PREFIX'/main.py \n\
+# ' > run_gpt_academic.sh \
+#   && chmod +x run_gpt_academic.sh
+
+# RUN echo -e '[Unit] \n\
+# Description=Conda Python Service \n\
+#  \n\
+# [Service] \n\
+# Type=simple \n\
+# ExecStart=bash '$GPT_sh_PREFIX'/run_gpt_academic.sh \n\
+# Restart=on-failure \n\
+#  \n\
+# [Install] \n\
+# WantedBy=multi-user.target \n\
+# ' > /etc/systemd/system/gpt_academic.service 
+# # Neet to exec these commands in container
+# # systemctl enable gpt_academic 
+# # systemctl start gpt_academic
+# #---------------------
+
+#+++++++++++++++++++++
+# run gpt-academic
+#+++++++++++++++++++++
+ARG GPT_py_PREFIX="/projects/gpt_academic"
+WORKDIR $GPT_py_PREFIX
+COPY . .
+RUN python -c 'from check_proxy import warm_up_modules; warm_up_modules()'
+CMD ["bash", "-c", "python -u main.py"]
+#---------------------
+
+
+
+
+
+
